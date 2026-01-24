@@ -1,16 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Home from './components/Home'
-import OrgProfile from './components/OrgProfile'
+import Dashboard from './components/Dashboard'
 import './App.css'
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/org/:slug" element={<OrgProfile />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="app">
+      <Dashboard />
+    </div>
   )
 }
 
