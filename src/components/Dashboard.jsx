@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -39,7 +40,9 @@ function Dashboard() {
   }
   
   const calculateStats = (orgs, financials) => {
-    const years = [...new Set(financials.map(f => f.year))].filter(year => year <= 2023).sort()
+    const years = [...new Set(financials.map(f => f.year))]
+      .filter(year => year <= 2023)
+      .sort()
     
     const byYear = {}
     years.forEach(year => {
@@ -55,31 +58,55 @@ function Dashboard() {
       }
     })
     
-    const revenueByYear = Object.values(byYear).map(y => ({ year: y.year, revenue: y.revenue, expenses: y.expenses }))
+    const revenueByYear = Object.values(byYear).map(y => ({
+      year: y.year,
+      revenue: y.revenue,
+      expenses: y.expenses
+    }))
+    
     const latestYear = Math.max(...years)
     const latestData = byYear[latestYear]
     
     const orgHealth = {}
     orgs.forEach(org => {
-      const orgFinancials = financials.filter(f => f.organization_id === org.id).sort((a, b) => b.year - a.year)
-      
+      const orgFinancials = financials
+        .filter(f => f.organization_id === org.id)
+        .sort((a, b) => b.year - a.year)
+
       if (orgFinancials.length > 0) {
-        const latest = orgFinancials[0]
-        const margin = latest.revenue - latest.expenses
-        const marginPercent = latest.revenue > 0 ? (margin / latest.revenue) * 100 : 0
-        
+        // Use up to 3 most recent years for rolling average
+        const recentYears = orgFinancials.slice(0, 3)
+        const yearsUsed = recentYears.map(f => f.year)
+
+        // Calculate 3-year averages
+        const avgRevenue = recentYears.reduce((sum, f) => sum + (f.revenue || 0), 0) / recentYears.length
+        const avgExpenses = recentYears.reduce((sum, f) => sum + (f.expenses || 0), 0) / recentYears.length
+        const avgMargin = avgRevenue - avgExpenses
+        const avgMarginPercent = avgRevenue > 0 ? (avgMargin / avgRevenue) * 100 : 0
+
+        // Use latest year for assets (point-in-time metric)
+        const latestAssets = orgFinancials[0].assets || 0
+
+        // Health thresholds (symmetric around break-even)
+        // Healthy: margin > 5%
+        // Stable: margin between -5% and +5%
+        // At Risk: margin < -5%
         let health = 'healthy'
-        if (marginPercent < -10) health = 'at-risk'
-        else if (marginPercent < 5) health = 'stable'
-        
+        if (avgMarginPercent < -5) health = 'at-risk'
+        else if (avgMarginPercent < 5) health = 'stable'
+
         orgHealth[org.id] = {
           ...org,
           health,
-          revenue: latest.revenue,
-          expenses: latest.expenses,
-          assets: latest.assets || 0,
-          margin: marginPercent,
-          ein: org.ein
+          revenue: avgRevenue,
+          expenses: avgExpenses,
+          assets: latestAssets,
+          margin: avgMarginPercent,
+          ein: org.ein,
+          yearsAnalyzed: yearsUsed,
+          yearRange: yearsUsed.length > 1
+            ? `${Math.min(...yearsUsed)}-${Math.max(...yearsUsed)}`
+            : `${yearsUsed[0]}`
         }
       }
     })
@@ -91,6 +118,7 @@ function Dashboard() {
     }
     
     const sizeDistribution = { small: 0, medium: 0, large: 0 }
+    
     Object.values(orgHealth).forEach(org => {
       if (org.revenue < 100000) sizeDistribution.small++
       else if (org.revenue < 1000000) sizeDistribution.medium++
@@ -194,9 +222,10 @@ function Dashboard() {
             </ResponsiveContainer>
           </div>
           <div className="health-legend">
-            <div className="legend-item"><span className="dot" style={{ background: '#4ade80' }}></span><strong>Healthy:</strong> Revenue exceeds expenses by 5%+</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#fbbf24' }}></span><strong>Stable:</strong> Breaking even (margin -5% to +5%)</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#ef4444' }}></span><strong>At Risk:</strong> Expenses exceed revenue by 10%+</div>
+            <p className="legend-note">Based on 3-year average operating margin</p>
+            <div className="legend-item"><span className="dot" style={{ background: '#4ade80' }}></span><strong>Healthy:</strong> Margin above +5%</div>
+            <div className="legend-item"><span className="dot" style={{ background: '#fbbf24' }}></span><strong>Stable:</strong> Margin between -5% and +5%</div>
+            <div className="legend-item"><span className="dot" style={{ background: '#ef4444' }}></span><strong>At Risk:</strong> Margin below -5%</div>
           </div>
         </section>
         
@@ -219,9 +248,10 @@ function Dashboard() {
       <div className="two-column">
         <section className="dashboard-section">
           <h2>💰 Top 10 by Annual Revenue</h2>
+          <p className="section-note">3-year average revenue from IRS 990 filings</p>
           <div className="top-orgs-list">
             {stats.top10Revenue.map((org, index) => (
-              <div key={org.id} className="top-org-item">
+              <Link key={org.id} to={`/org/${org.slug}`} className="top-org-item">
                 <div className="rank">#{index + 1}</div>
                 <div className="org-info">
                   <h3>{org.name}</h3>
@@ -230,19 +260,21 @@ function Dashboard() {
                     <span className="health" data-health={org.health}>
                       {org.health === 'healthy' ? '✓ Healthy' : org.health === 'stable' ? '● Stable' : '⚠ At Risk'}
                     </span>
+                    <span className="year-range">{org.yearRange}</span>
                   </div>
                 </div>
-                {org.ein && <a href={`https://projects.propublica.org/nonprofits/organizations/${org.ein}`} target="_blank" rel="noopener noreferrer" className="propublica-link">990s →</a>}
-              </div>
+                {org.ein && <span className="propublica-link" onClick={(e) => { e.preventDefault(); window.open(`https://projects.propublica.org/nonprofits/organizations/${org.ein}`, '_blank'); }}>990s →</span>}
+              </Link>
             ))}
           </div>
         </section>
-        
+
         <section className="dashboard-section">
           <h2>🏦 Top 10 by Total Assets</h2>
+          <p className="section-note">Most recent reported assets from IRS 990 filings</p>
           <div className="top-orgs-list">
             {stats.top10Assets.map((org, index) => (
-              <div key={org.id} className="top-org-item">
+              <Link key={org.id} to={`/org/${org.slug}`} className="top-org-item">
                 <div className="rank">#{index + 1}</div>
                 <div className="org-info">
                   <h3>{org.name}</h3>
@@ -251,10 +283,11 @@ function Dashboard() {
                     <span className="health" data-health={org.health}>
                       {org.health === 'healthy' ? '✓ Healthy' : org.health === 'stable' ? '● Stable' : '⚠ At Risk'}
                     </span>
+                    <span className="year-range">{org.yearRange}</span>
                   </div>
                 </div>
-                {org.ein && <a href={`https://projects.propublica.org/nonprofits/organizations/${org.ein}`} target="_blank" rel="noopener noreferrer" className="propublica-link">990s →</a>}
-              </div>
+                {org.ein && <span className="propublica-link" onClick={(e) => { e.preventDefault(); window.open(`https://projects.propublica.org/nonprofits/organizations/${org.ein}`, '_blank'); }}>990s →</span>}
+              </Link>
             ))}
           </div>
         </section>
@@ -263,34 +296,36 @@ function Dashboard() {
       <div className="two-column">
         <section className="dashboard-section">
           <h2>💪 Strongest Financial Position</h2>
-          <p className="section-note">Highest operating margins (min. $50K revenue)</p>
+          <p className="section-note">Highest 3-year average operating margins (min. $50K revenue)</p>
           <div className="health-list">
             {stats.strongest.map((org, index) => (
-              <div key={org.id} className="health-list-item">
+              <Link key={org.id} to={`/org/${org.slug}`} className="health-list-item">
                 <div className="health-org-name"><strong>#{index + 1}</strong> {org.name}</div>
                 <div className="health-org-stats">
-                  <span className="margin positive">+{org.margin.toFixed(1)}% margin</span>
+                  <span className="margin positive">+{org.margin.toFixed(1)}%</span>
                   <span className="revenue-small">${(org.revenue / 1000).toFixed(0)}K</span>
+                  <span className="year-range">{org.yearRange}</span>
                 </div>
-                {org.ein && <a href={`https://projects.propublica.org/nonprofits/organizations/${org.ein}`} target="_blank" rel="noopener noreferrer" className="propublica-link-small">990s</a>}
-              </div>
+                {org.ein && <span className="propublica-link-small" onClick={(e) => { e.preventDefault(); window.open(`https://projects.propublica.org/nonprofits/organizations/${org.ein}`, '_blank'); }}>990s</span>}
+              </Link>
             ))}
           </div>
         </section>
-        
+
         <section className="dashboard-section">
           <h2>⚠️ Most Financially Challenged</h2>
-          <p className="section-note">Most negative margins (min. $50K revenue)</p>
+          <p className="section-note">Most negative 3-year average margins (min. $50K revenue)</p>
           <div className="health-list">
             {stats.weakest.map((org, index) => (
-              <div key={org.id} className="health-list-item">
+              <Link key={org.id} to={`/org/${org.slug}`} className="health-list-item">
                 <div className="health-org-name"><strong>#{index + 1}</strong> {org.name}</div>
                 <div className="health-org-stats">
-                  <span className="margin negative">{org.margin.toFixed(1)}% margin</span>
+                  <span className="margin negative">{org.margin.toFixed(1)}%</span>
                   <span className="revenue-small">${(org.revenue / 1000).toFixed(0)}K</span>
+                  <span className="year-range">{org.yearRange}</span>
                 </div>
-                {org.ein && <a href={`https://projects.propublica.org/nonprofits/organizations/${org.ein}`} target="_blank" rel="noopener noreferrer" className="propublica-link-small">990s</a>}
-              </div>
+                {org.ein && <span className="propublica-link-small" onClick={(e) => { e.preventDefault(); window.open(`https://projects.propublica.org/nonprofits/organizations/${org.ein}`, '_blank'); }}>990s</span>}
+              </Link>
             ))}
           </div>
         </section>
@@ -301,7 +336,7 @@ function Dashboard() {
         <div className="insights-grid">
           <div className="insight-card">
             <h3>Movement Size</h3>
-            <p>Michigan environmental movement represents over <strong>${(stats.totalRevenue / 1000000).toFixed(0)} million</strong> in annual economic activity across {stats.orgCount} organizations with available financial data.</p>
+            <p>Michigan's environmental movement represents over <strong>${(stats.totalRevenue / 1000000).toFixed(0)} million</strong> in annual economic activity across {stats.orgCount} organizations with available financial data.</p>
           </div>
           <div className="insight-card">
             <h3>Financial Health</h3>
