@@ -1,6 +1,6 @@
 # ECOcensus Michigan - Project State Document
 
-**Last Updated:** January 24, 2026
+**Last Updated:** January 25, 2026
 **Repository:** https://github.com/Planet-Detroit/ecocensus
 **Live Site:** Deployed on Vercel
 
@@ -36,7 +36,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 | **Pay equity assessment** | ❌ Not started | CEO compensation analysis (requires Schedule J data) |
 | **Funding structure analysis** | ❌ Not started | Revenue source patterns and success correlations |
 | **Peer benchmarks** | ❌ Not started | Compare similar-sized organizations |
-| **Media mentions** | ⚠️ Script exists | `scripts/collect_media_mentions.py` - needs integration |
+| **Media mentions** | 🔄 In Progress | Script running, UI integration pending |
 
 ---
 
@@ -74,8 +74,8 @@ org-profiles/
 ## Database Schema (Supabase)
 
 ### Organizations Table
-- `id`, `name`, `slug`
-- `ein` (IRS Employer Identification Number)
+- `id` (UUID), `name`, `slug`
+- `ein` (IRS Employer Identification Number) - 554 orgs have EINs
 - `city`, `state`, `zip`
 - `latitude`, `longitude` (517 orgs geocoded)
 - `ntee_code` (National Taxonomy of Exempt Entities)
@@ -83,10 +83,64 @@ org-profiles/
 - `website`, `mission`
 
 ### Financials Table
-- `id`, `org_id` (foreign key)
+- `id`, `organization_id` (foreign key)
 - `year` (fiscal year)
 - `revenue`, `expenses`, `assets`
 - Data available: 2019-2024 (2024 partial - 15 records)
+
+### Outlets Table
+- `id`, `name`, `url`, `outlet_type`, `region`
+- 12 Michigan outlets configured (Bridge Michigan, Detroit Free Press, MLive, etc.)
+
+### Media Mentions Table
+- `id`, `organization_id` (FK), `outlet_id` (FK)
+- `article_url`, `headline`, `published_date`
+- `excerpt`, `mention_type`, `created_at`
+
+---
+
+## Media Mentions System
+
+### Script Location
+`scripts/collect_media_mentions.py`
+
+### What It Does
+- Uses Claude API with web search to find articles (2023-2026)
+- Searches 12 Michigan media outlets + optional Google News
+- Writes directly to Supabase `media_mentions` table
+- Deduplicates by URL across all organizations
+- Prioritizes orgs with EINs (larger, more newsworthy)
+
+### CLI Options
+```bash
+python collect_media_mentions.py --test           # 3 orgs (quick test)
+python collect_media_mentions.py --limit 10       # First 10 orgs
+python collect_media_mentions.py --offset 50 --limit 20  # Orgs 51-70 (resume)
+python collect_media_mentions.py --no-google      # Skip Google News
+python collect_media_mentions.py --all-orgs       # Include orgs without EINs
+python collect_media_mentions.py -v               # Verbose output
+```
+
+### Outlets Configured
+| Outlet | Domain | Type |
+|--------|--------|------|
+| Bridge Michigan | bridgemi.com | Nonprofit News |
+| Detroit Free Press | freep.com | Daily Newspaper |
+| The Detroit News | detroitnews.com | Daily Newspaper |
+| MLive | mlive.com | News Website |
+| Michigan Radio | michiganradio.org | Public Radio |
+| Crain's Detroit Business | crainsdetroit.com | Business News |
+| Planet Detroit | planetdetroit.org | Environmental News |
+| Michigan Advance | michiganadvance.com | News Website |
+| Detroit Metro Times | metrotimes.com | Alternative Weekly |
+| WDET | wdet.org | Public Radio |
+| Interlochen Public Radio | interlochenpublicradio.org | Public Radio |
+| Great Lakes Now | greatlakesnow.org | Environmental News |
+
+### API Costs
+- ~6,648 API calls for full run (554 EIN orgs × 12 outlets)
+- Rate limited: 1.5s between outlets, 3s between orgs
+- Full run takes several hours
 
 ---
 
@@ -106,65 +160,6 @@ if (avgMarginPercent >= -5 && <= 5) → "Stable"
 if (avgMarginPercent < -5) → "At Risk"
 ```
 
-This approach smooths year-over-year fluctuations common in nonprofits (grant cycles, capital campaigns, etc.).
-
----
-
-## NTEE Codes Reference
-
-The app includes 47 NTEE codes with human-readable meanings:
-
-| Code | Meaning |
-|------|---------|
-| C01 | Environmental Alliance |
-| C20 | Pollution Abatement |
-| C27 | Recycling Programs |
-| C30 | Natural Resources Conservation |
-| C32 | Water Conservation |
-| C34 | Land Conservation |
-| C35 | Energy Resources |
-| C36 | Forestry |
-| C40 | Botanical & Horticultural |
-| C42 | Garden Clubs |
-| C50 | Zoos & Aquariums |
-| C60 | Environmental Education |
-| ... | (see Home.jsx for full list) |
-
----
-
-## Focus Areas (27 categories)
-
-Advocacy, Air Quality, Birding, Climate, Coastal, Energy, Environmental Education, Environmental Health, Environmental Justice, Farming, Fishing & Hunting, Food, Forestry, Green Infrastructure, Health, Justice, Land, Land Use, Parks, Recycling, Transportation, Trees, Urban Agriculture, Waste, Water, Wetlands, Wildlife
-
----
-
-## Media Mentions Script
-
-**Location:** `scripts/collect_media_mentions.py`
-
-**What it does:**
-- Uses Claude API with web search to find articles mentioning Michigan environmental orgs
-- Searches 8 Michigan media outlets (Bridge Michigan, Detroit Free Press, MLive, etc.)
-- Outputs CSV and JSON files with headlines, URLs, excerpts, dates
-
-**Requirements:**
-- `ANTHROPIC_API_KEY` in `.env` file
-- Python packages: `anthropic`, `python-dotenv`
-
-**Current state:** Test script with 10 sample organizations. Needs:
-1. Supabase table for storing mentions
-2. Integration with org profile pages
-3. Expansion to all organizations
-
----
-
-## Styling Notes
-
-- **Font:** Arimo (Google Fonts) - clean sans-serif
-- **Design:** Clean & minimal header, card-based layouts
-- **Map:** Markers reduced 25% from Leaflet defaults
-- **Responsive:** Landing page optimized for map "above the fold"
-
 ---
 
 ## Recent Changes (January 2026)
@@ -178,34 +173,37 @@ Advocacy, Air Quality, Birding, Climate, Coastal, Energy, Environmental Educatio
 7. Added year range display to health rankings
 8. Created compact landing page layout
 9. Reduced map marker sizes
+10. **Created media mentions collection script with Supabase integration**
+11. **Added outlets and media_mentions tables to database**
 
 ---
 
-## Next Steps (Recommended Priority)
+## Next Steps (Prioritized)
+
+### Immediate (After Script Completes)
+1. **Add Media section to OrgProfile.jsx** - Display collected mentions on org pages
 
 ### High Priority
-1. **Media Mentions Integration** - Create Supabase table, run script for all orgs, add to profiles
 2. **Regional Economic Breakdowns** - Add county/region aggregations to dashboard
+3. **Export Feature** - Let researchers download filtered org lists as CSV
 
 ### Medium Priority
-3. **Revenue Source Analysis** - If 990 data includes breakdown, add pie charts
-4. **Export Feature** - Let researchers download filtered org lists as CSV
+4. **Revenue Source Analysis** - If 990 data includes breakdown, add pie charts
+5. **Media mentions on Organizations page** - Show mention count as a sortable column
 
 ### Lower Priority (Higher Effort)
-5. **Board Member Network** - Requires Schedule J/O data from 990s
-6. **Mission/Program NLP** - Auto-categorization using Claude
+6. **Board Member Network** - Requires Schedule J/O data from 990s
+7. **Mission/Program NLP** - Auto-categorization using Claude
 
 ---
 
 ## Environment Variables
 
-```
-# .env (for media mentions script)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Supabase (configured in app)
-VITE_SUPABASE_URL=https://xxx.supabase.co
+```bash
+# .env file
+VITE_SUPABASE_URL=https://zocaxurjikmwskmwfsfv.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ---
@@ -214,7 +212,7 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 
 - **Project Lead:** Michigan Environmental Council
 - **Data Partner:** Johnson Center for Philanthropy, GVSU
-- **Development:** Planet Detroit
+- **Development:** Planet Detroit (Nina)
 
 ---
 
