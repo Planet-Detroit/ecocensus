@@ -2,7 +2,7 @@
 
 **Last Updated:** January 25, 2026
 **Repository:** https://github.com/Planet-Detroit/ecocensus
-**Live Site:** Deployed on Vercel
+**Live Site:** https://ecocensus.vercel.app
 
 ---
 
@@ -13,7 +13,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 ### Tech Stack
 
 - **Frontend:** React + Vite
-- **Styling:** Custom CSS (Arimo font from Google Fonts)
+- **Styling:** Custom CSS (Arimo/Asap fonts from Google Fonts)
 - **Database:** Supabase (PostgreSQL)
 - **Mapping:** Leaflet / react-leaflet
 - **Charts:** Recharts
@@ -25,7 +25,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 
 | Proposal Goal | Status | Notes |
 |--------------|--------|-------|
-| **Phase 1: Data Collection** | ✅ Done | 600+ orgs, financials in Supabase |
+| **Phase 1: Data Collection** | ✅ Done | 732 orgs, 1197 financial records in Supabase |
 | **Geographic mapping** | ✅ Done | 517 orgs geocoded, Leaflet map on landing page |
 | **NTEE categorization** | ✅ Done | 47 NTEE codes with human-readable meanings on org cards |
 | **Focus area tagging** | ✅ Done | 27 focus areas with dropdown filter on Organizations page |
@@ -36,7 +36,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 | **Pay equity assessment** | ❌ Not started | CEO compensation analysis (requires Schedule J data) |
 | **Funding structure analysis** | ❌ Not started | Revenue source patterns and success correlations |
 | **Peer benchmarks** | ❌ Not started | Compare similar-sized organizations |
-| **Media mentions** | 🔄 In Progress | Script running, UI integration pending |
+| **Media mentions** | ⚠️ UI Done, Collection Failed | UI integrated, but automated collection hit API limits |
 
 ---
 
@@ -49,7 +49,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 | `/` | `Landing.jsx` | Home page with interactive map of all geocoded orgs |
 | `/organizations` | `Home.jsx` | Searchable/filterable list of all organizations |
 | `/dashboard` | `Dashboard.jsx` | Financial health rankings and aggregate statistics |
-| `/org/:slug` | `OrgProfile.jsx` | Individual organization profile with financials |
+| `/org/:slug` | `OrgProfile.jsx` | Individual organization profile with financials and media mentions |
 
 ### Key Files
 
@@ -61,11 +61,14 @@ org-profiles/
 │   ├── index.css        # Base styles and CSS reset
 │   └── components/
 │       ├── Landing.jsx      # Map page with Leaflet
-│       ├── Home.jsx         # Organizations list with filters
+│       ├── Home.jsx         # Organizations list with filters (paginated financials fetch)
 │       ├── Dashboard.jsx    # Financial health dashboard
-│       └── OrgProfile.jsx   # Individual org profiles
+│       └── OrgProfile.jsx   # Individual org profiles with media mentions
 ├── scripts/
-│   └── collect_media_mentions.py  # Media mentions collector (Claude API)
+│   ├── collect_media_mentions.py  # Claude API collector (rate limited)
+│   ├── collect_media_gdelt.py     # GDELT collector (rate limited)
+│   └── collect_media_google.py    # Google Custom Search (requires billing)
+├── vercel.json          # Client-side routing config
 └── PROJECT_STATE.md     # This file
 ```
 
@@ -79,68 +82,135 @@ org-profiles/
 - `city`, `state`, `zip`
 - `latitude`, `longitude` (517 orgs geocoded)
 - `ntee_code` (National Taxonomy of Exempt Entities)
-- `focus_areas` (array of 27 possible areas)
-- `website`, `mission`
+- `focus` (array of 27 possible areas)
+- `website`, `mission_statement_text`
 
-### Financials Table
+### Financials Table (1197 records)
 - `id`, `organization_id` (foreign key)
-- `year` (fiscal year)
-- `revenue`, `expenses`, `assets`
-- Data available: 2019-2024 (2024 partial - 15 records)
+- `year` (fiscal year), `revenue`, `expenses`, `assets`
+- 286 organizations have financial data
 
 ### Outlets Table
 - `id`, `name`, `url`, `outlet_type`, `region`
-- 12 Michigan outlets configured (Bridge Michigan, Detroit Free Press, MLive, etc.)
+- 12 Michigan outlets configured
 
 ### Media Mentions Table
-- `id`, `organization_id` (FK), `outlet_id` (FK)
+- `id`, `organization_id` (FK), `outlet_id` (FK, nullable)
 - `article_url`, `headline`, `published_date`
 - `excerpt`, `mention_type`, `created_at`
+- Currently contains manually-added demo records
 
 ---
 
 ## Media Mentions System
 
-### Script Location
-`scripts/collect_media_mentions.py`
+### Current State: UI Complete, Automated Collection Failed
 
-### What It Does
-- Uses Claude API with web search to find articles (2023-2026)
-- Searches 12 Michigan media outlets + optional Google News
-- Writes directly to Supabase `media_mentions` table
-- Deduplicates by URL across all organizations
-- Prioritizes orgs with EINs (larger, more newsworthy)
+The org profile pages now display media mentions from Supabase, with outlet names extracted from URLs when `outlet_id` is null. However, automated collection hit roadblocks:
 
-### CLI Options
-```bash
-python collect_media_mentions.py --test           # 3 orgs (quick test)
-python collect_media_mentions.py --limit 10       # First 10 orgs
-python collect_media_mentions.py --offset 50 --limit 20  # Orgs 51-70 (resume)
-python collect_media_mentions.py --no-google      # Skip Google News
-python collect_media_mentions.py --all-orgs       # Include orgs without EINs
-python collect_media_mentions.py -v               # Verbose output
+| Approach | Problem |
+|----------|---------|
+| **Claude API + Web Search** | 429 rate limits after ~20 calls, even with 5s delays |
+| **GDELT API** | 429 rate limits, inconsistent results |
+| **Google Custom Search API** | Requires billing account linked to project |
+
+### Scripts Created (in `/scripts/`)
+
+1. **collect_media_mentions.py** - Claude API with web search tool
+2. **collect_media_gdelt.py** - GDELT news archive
+3. **collect_media_google.py** - Google Custom Search API
+
+### Recommended Alternative Approaches
+
+Based on research, here are better options for collecting media mentions:
+
+#### Option 1: NewsAPI.ai (RECOMMENDED)
+- **Why:** Entity extraction built-in, can search by organization name
+- **Historical:** Data since 2014
+- **Free tier:** 1,000 API calls/month
+- **Key feature:** Returns organizations mentioned in articles via NLP
+- **URL:** https://newsapi.ai/
+
+#### Option 2: NewsData.io
+- **Why:** 7 years historical data, 84,000+ sources
+- **Free tier:** 200 requests/day
+- **Key feature:** Archive search for historical mentions
+- **URL:** https://newsdata.io/
+
+#### Option 3: Webz.io News API Lite
+- **Why:** Semantic tagging of organizations, 30 days historical
+- **Free tier:** Limited free access
+- **Key feature:** Built for brand/organization monitoring
+- **URL:** https://webz.io/
+
+#### Option 4: Google Custom Search (with billing)
+- **Why:** Already set up, just needs billing enabled
+- **Cost:** $5 per 1,000 queries after free 100/day
+- **To enable:** Link billing account to Google Cloud project `planetdetroit`
+- **Existing script:** `collect_media_google.py` ready to use
+
+#### Option 5: Manual Curation + Google Alerts
+- **Why:** Free, no API limits, high quality
+- **Process:**
+  1. Set up Google Alerts for top 50 organizations
+  2. Manually add mentions to Supabase as they come in
+  3. Focus on quality over quantity
+- **Best for:** Ongoing monitoring rather than historical backfill
+
+### Domain Map for URL-Based Outlet Names
+
+The `OrgProfile.jsx` component extracts outlet names from URLs when `outlet_id` is null:
+
+```javascript
+const domainMap = {
+  'bridgemi.com': 'Bridge Michigan',
+  'freep.com': 'Detroit Free Press',
+  'detroitnews.com': 'The Detroit News',
+  'mlive.com': 'MLive',
+  'michiganradio.org': 'Michigan Radio',
+  'michiganadvance.com': 'Michigan Advance',
+  'wlns.com': 'WLNS',
+  // ... etc
+}
 ```
 
-### Outlets Configured
-| Outlet | Domain | Type |
-|--------|--------|------|
-| Bridge Michigan | bridgemi.com | Nonprofit News |
-| Detroit Free Press | freep.com | Daily Newspaper |
-| The Detroit News | detroitnews.com | Daily Newspaper |
-| MLive | mlive.com | News Website |
-| Michigan Radio | michiganradio.org | Public Radio |
-| Crain's Detroit Business | crainsdetroit.com | Business News |
-| Planet Detroit | planetdetroit.org | Environmental News |
-| Michigan Advance | michiganadvance.com | News Website |
-| Detroit Metro Times | metrotimes.com | Alternative Weekly |
-| WDET | wdet.org | Public Radio |
-| Interlochen Public Radio | interlochenpublicradio.org | Public Radio |
-| Great Lakes Now | greatlakesnow.org | Environmental News |
+Add new outlets to this map as needed.
 
-### API Costs
-- ~6,648 API calls for full run (554 EIN orgs × 12 outlets)
-- Rate limited: 1.5s between outlets, 3s between orgs
-- Full run takes several hours
+---
+
+## Recent Fixes
+
+### Supabase 1000-Row Limit
+The Home.jsx component now paginates through all financial records to correctly show "Financial data available" badges:
+
+```javascript
+// Paginate to overcome 1000 row default limit
+let allFinData = []
+let offset = 0
+const pageSize = 1000
+
+while (true) {
+  const finResponse = await fetch(
+    `${SUPABASE_URL}/rest/v1/financials?select=organization_id&offset=${offset}&limit=${pageSize}`,
+    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }}
+  )
+  const finData = await finResponse.json()
+  allFinData = allFinData.concat(finData)
+  if (finData.length < pageSize) break
+  offset += pageSize
+}
+```
+
+### Vercel Client-Side Routing
+Added `vercel.json` to fix 404 errors on page refresh:
+
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
+```
 
 ---
 
@@ -173,27 +243,31 @@ if (avgMarginPercent < -5) → "At Risk"
 7. Added year range display to health rankings
 8. Created compact landing page layout
 9. Reduced map marker sizes
-10. **Created media mentions collection script with Supabase integration**
-11. **Added outlets and media_mentions tables to database**
+10. Created media mentions collection scripts (3 approaches)
+11. Added outlets and media_mentions tables to database
+12. **Added Media Coverage section to org profile pages**
+13. **Fixed financials pagination (1000 row limit)**
+14. **Added vercel.json for client-side routing**
 
 ---
 
 ## Next Steps (Prioritized)
 
-### Immediate (After Script Completes)
-1. **Add Media section to OrgProfile.jsx** - Display collected mentions on org pages
+### Immediate
+1. **Choose media mentions API** - NewsAPI.ai recommended for entity extraction
+2. **Enable Google billing** - If preferring Google Custom Search approach
 
 ### High Priority
-2. **Regional Economic Breakdowns** - Add county/region aggregations to dashboard
-3. **Export Feature** - Let researchers download filtered org lists as CSV
+3. **Regional Economic Breakdowns** - Add county/region aggregations to dashboard
+4. **Export Feature** - Let researchers download filtered org lists as CSV
 
 ### Medium Priority
-4. **Revenue Source Analysis** - If 990 data includes breakdown, add pie charts
-5. **Media mentions on Organizations page** - Show mention count as a sortable column
+5. **Revenue Source Analysis** - If 990 data includes breakdown, add pie charts
+6. **Media mentions on Organizations page** - Show mention count as a sortable column
 
 ### Lower Priority (Higher Effort)
-6. **Board Member Network** - Requires Schedule J/O data from 990s
-7. **Mission/Program NLP** - Auto-categorization using Claude
+7. **Board Member Network** - Requires Schedule J/O data from 990s
+8. **Mission/Program NLP** - Auto-categorization using Claude
 
 ---
 
@@ -203,7 +277,9 @@ if (avgMarginPercent < -5) → "At Risk"
 # .env file
 VITE_SUPABASE_URL=https://zocaxurjikmwskmwfsfv.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...        # For Claude API collector
+GOOGLE_API_KEY=AIzaSy...            # For Google Custom Search
+GOOGLE_CSE_ID=b6cc4d5423a1c42f1     # Custom Search Engine ID
 ```
 
 ---
