@@ -191,7 +191,7 @@ class MediaMentionsCollector:
         except:
             return set()
 
-    def search_org_in_outlet(self, org_name: str, outlet: Dict) -> List[Dict]:
+    def search_org_in_outlet(self, org_name: str, outlet: Dict, max_retries: int = 3) -> List[Dict]:
         """Search for an organization in a specific outlet using Claude web search."""
 
         print(f"    Searching {outlet['name']}...", end=" ", flush=True)
@@ -240,43 +240,56 @@ Return ONLY a JSON array with this structure:
 If no articles found, return empty array: []
 Do not include articles from other websites."""
 
-        try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=[{
-                    "role": "user",
-                    "content": search_prompt
-                }]
-            )
+        for attempt in range(max_retries):
+            try:
+                response = self.client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=4000,
+                    tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                    messages=[{
+                        "role": "user",
+                        "content": search_prompt
+                    }]
+                )
 
-            result_text = ""
-            for block in response.content:
-                if block.type == "text":
-                    result_text += block.text
+                result_text = ""
+                for block in response.content:
+                    if block.type == "text":
+                        result_text += block.text
 
-            if self.verbose:
-                print(f"\n      Raw response: {result_text[:200]}...")
+                if self.verbose:
+                    print(f"\n      Raw response: {result_text[:200]}...")
 
-            json_match = re.search(r'\[[\s\S]*?\]', result_text)
-            if json_match:
-                articles = json.loads(json_match.group(0))
-                # Filter to only include URLs from the correct domain (skip for Google News)
-                if outlet["domain"] == "news.google.com":
-                    valid_articles = articles  # Accept all URLs from Google News search
+                json_match = re.search(r'\[[\s\S]*?\]', result_text)
+                if json_match:
+                    articles = json.loads(json_match.group(0))
+                    # Filter to only include URLs from the correct domain (skip for Google News)
+                    if outlet["domain"] == "news.google.com":
+                        valid_articles = articles  # Accept all URLs from Google News search
+                    else:
+                        valid_articles = [a for a in articles if outlet['domain'] in a.get('url', '')]
+                    print(f"found {len(valid_articles)}")
+                    return valid_articles
                 else:
-                    valid_articles = [a for a in articles if outlet['domain'] in a.get('url', '')]
-                print(f"found {len(valid_articles)}")
-                return valid_articles
-            else:
-                print("no results")
-                return []
+                    print("no results")
+                    return []
 
-        except Exception as e:
-            print(f"error: {e}")
-            self.stats["errors"] += 1
-            return []
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "rate_limit" in error_str.lower():
+                    wait_time = 30 * (attempt + 1)  # 30s, 60s, 90s
+                    print(f"rate limited, waiting {wait_time}s...", end=" ", flush=True)
+                    time.sleep(wait_time)
+                    if attempt == max_retries - 1:
+                        print("giving up")
+                        self.stats["errors"] += 1
+                        return []
+                else:
+                    print(f"error: {e}")
+                    self.stats["errors"] += 1
+                    return []
+
+        return []
 
     def save_mention_to_db(self, org_id: str, outlet_domain: str, article: Dict) -> bool:
         """Save a single mention to Supabase. Returns True if inserted, False if duplicate."""
@@ -364,8 +377,8 @@ Do not include articles from other websites."""
                     global_urls.add(url)  # Add to global set for cross-org deduplication
                     print(f"      + {article.get('headline', 'No title')[:55]}...")
 
-            # Rate limiting
-            time.sleep(1.5)
+            # Rate limiting - 5 seconds between outlets to avoid 30k tokens/min limit
+            time.sleep(5)
 
         self.stats["mentions_found"] += org_mentions
         return org_mentions

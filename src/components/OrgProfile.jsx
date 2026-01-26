@@ -5,10 +5,43 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Extract outlet name from URL domain
+const getOutletNameFromUrl = (url) => {
+  if (!url) return 'News Source'
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '')
+    // Map common domains to friendly names
+    const domainMap = {
+      'bridgemi.com': 'Bridge Michigan',
+      'freep.com': 'Detroit Free Press',
+      'detroitnews.com': 'The Detroit News',
+      'mlive.com': 'MLive',
+      'michiganradio.org': 'Michigan Radio',
+      'secondwavemedia.com': 'Second Wave Media',
+      'metrotimes.com': 'Metro Times',
+      'crainsdetroit.com': "Crain's Detroit Business",
+      'dailydetroit.com': 'Daily Detroit',
+      'modelDmedia.com': 'Model D Media',
+      'detroitisit.com': 'Detroit Is It',
+      'hourdetroit.com': 'Hour Detroit',
+      'interlochen.org': 'Interlochen Public Radio',
+      'greatlakesnow.org': 'Great Lakes Now',
+      'news.google.com': 'Google News',
+      'npr.org': 'NPR',
+      'nytimes.com': 'The New York Times',
+      'washingtonpost.com': 'The Washington Post',
+    }
+    return domainMap[hostname] || hostname.split('.')[0].charAt(0).toUpperCase() + hostname.split('.')[0].slice(1)
+  } catch {
+    return 'News Source'
+  }
+}
+
 function OrgProfile() {
   const { slug } = useParams()
   const [org, setOrg] = useState(null)
   const [financials, setFinancials] = useState([])
+  const [mediaMentions, setMediaMentions] = useState([])
   const [loading, setLoading] = useState(true)
   
   useEffect(() => {
@@ -38,7 +71,15 @@ function OrgProfile() {
       )
       const finData = await finResponse.json()
       setFinancials(finData)
-      
+
+      // Fetch media mentions with outlet info
+      const mediaResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/media_mentions?organization_id=eq.${orgData[0].id}&select=*,outlets(name,url)&order=published_date.desc.nullslast`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }}
+      )
+      const mediaData = await mediaResponse.json()
+      setMediaMentions(mediaData)
+
       setLoading(false)
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -165,7 +206,36 @@ function OrgProfile() {
         
         <section className="media-section">
           <h2>Media Coverage</h2>
-          <p className="placeholder">Media mentions will appear here (collecting data...)</p>
+          {mediaMentions.length > 0 ? (
+            <div className="media-mentions-list">
+              {mediaMentions.map(mention => (
+                <article key={mention.id} className="media-mention-card">
+                  <div className="mention-outlet">
+                    {mention.outlets?.name || getOutletNameFromUrl(mention.article_url)}
+                  </div>
+                  <h3 className="mention-headline">
+                    <a href={mention.article_url} target="_blank" rel="noopener noreferrer">
+                      {mention.headline}
+                    </a>
+                  </h3>
+                  {mention.published_date && (
+                    <div className="mention-date">
+                      {new Date(mention.published_date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  )}
+                  {mention.excerpt && (
+                    <p className="mention-excerpt">{mention.excerpt}</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="no-data">No media mentions found for this organization.</p>
+          )}
         </section>
       </div>
     </div>

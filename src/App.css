@@ -539,6 +539,66 @@ body {
   text-align: center;
 }
 
+/* Media Mentions List */
+.media-mentions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.media-mention-card {
+  padding: 20px;
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.media-mention-card:hover {
+  border-color: #2f80c3;
+}
+
+.mention-outlet {
+  font-family: 'Asap', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2f80c3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.mention-headline {
+  font-family: 'Asap', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0 0 8px 0;
+}
+
+.mention-headline a {
+  color: #111;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.mention-headline a:hover {
+  color: #2f80c3;
+}
+
+.mention-date {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.mention-excerpt {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+  margin: 0;
+}
+
 /* No Data State */
 .no-data {
   font-size: 15px;

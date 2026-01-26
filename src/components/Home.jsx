@@ -106,16 +106,27 @@ function Home() {
       )
       const orgsData = await orgsResponse.json()
 
-      // Fetch financial data counts
-      const finResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/financials?select=organization_id`,
-        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }}
-      )
-      const finData = await finResponse.json()
+      // Fetch unique organization_ids that have financials
+      // We need to paginate since Supabase has a 1000 row limit
+      let allFinData = []
+      let offset = 0
+      const pageSize = 1000
+
+      while (true) {
+        const finResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/financials?select=organization_id&offset=${offset}&limit=${pageSize}`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }}
+        )
+        const finData = await finResponse.json()
+        allFinData = allFinData.concat(finData)
+
+        if (finData.length < pageSize) break
+        offset += pageSize
+      }
 
       // Count financials per org
       const finCounts = {}
-      finData.forEach(f => {
+      allFinData.forEach(f => {
         finCounts[f.organization_id] = (finCounts[f.organization_id] || 0) + 1
       })
 
