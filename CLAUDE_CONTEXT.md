@@ -6,7 +6,7 @@
 
 ## Quick Summary
 
-ECOcensus Michigan is a React + Supabase web app showing Michigan environmental nonprofits. It displays 732 organizations with financial data, maps, and media mentions.
+ECOcensus Michigan is a React + Supabase web app showing Michigan environmental nonprofits. It displays 607 organizations with financial data, maps, and media mentions.
 
 **Live site:** https://ecocensus.vercel.app
 **Repo:** https://github.com/Planet-Detroit/ecocensus
@@ -40,8 +40,8 @@ ECOcensus Michigan is a React + Supabase web app showing Michigan environmental 
 
 ## Database Tables (Supabase)
 
-1. **organizations** - 732 orgs, UUID `id`, has `slug` for URLs
-2. **financials** - 1197 records, links via `organization_id`
+1. **organizations** - 607 orgs, UUID `id`, has `slug` for URLs
+2. **financials** - 1,197 records covering 243 of 607 orgs (~40%), links via `organization_id`
 3. **outlets** - 12 Michigan news outlets
 4. **media_mentions** - Links orgs to articles, `outlet_id` often NULL
 
@@ -50,7 +50,7 @@ ECOcensus Michigan is a React + Supabase web app showing Michigan environmental 
 ## Recent Issues & Fixes
 
 ### 1. Supabase 1000-row limit
-Home.jsx now paginates to fetch all 1197 financial records:
+Home.jsx now paginates to fetch all 1,197 financial records:
 ```javascript
 while (true) {
   const finResponse = await fetch(

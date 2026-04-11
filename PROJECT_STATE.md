@@ -1,8 +1,20 @@
 # ECOcensus Michigan - Project State Document
 
-**Last Updated:** January 25, 2026
+**Last Updated:** April 11, 2026
 **Repository:** https://github.com/Planet-Detroit/ecocensus
 **Live Site:** https://ecocensus.vercel.app
+
+---
+
+> ## ⚠️ Schema Rebuild Planned (April 2026)
+>
+> The `organizations` and `financials` tables described in this document are slated to be replaced as part of the ECOcensus 2.0 collaboration with Michigan Environmental Council. The plan is to rebuild the underlying schema with AI-assisted classification, full provenance tracking, and three tiers of entities (501(c)(3) nonprofits, for-profit environmental businesses, and unincorporated groups).
+>
+> **Source of truth for the new design:**
+> - `/Users/user/projects/michigan-environmental-orgs/schema.md` — full v2 schema design
+> - `/Users/user/projects/michigan-environmental-orgs/nextsteps.md` — phased migration plan, including a Phase 4 cutover that updates all `org-profiles` components to query the new `ecocensus.entities` table
+>
+> Most of the "Database Schema" and "Application Structure" sections in this document will need to be rewritten after the cutover. The current numbers (607 orgs, 1,197 financial records covering 243 orgs) and the existing components are accurate as of today, but the underlying tables they query will change.
 
 ---
 
@@ -25,7 +37,7 @@ ECOcensus Michigan is a web application that provides analysis and visualization
 
 | Proposal Goal | Status | Notes |
 |--------------|--------|-------|
-| **Phase 1: Data Collection** | ✅ Done | 732 orgs, 1197 financial records in Supabase |
+| **Phase 1: Data Collection** | ✅ Done | 607 orgs, 1,197 financial records (243 orgs covered) in Supabase |
 | **Geographic mapping** | ✅ Done | 517 orgs geocoded, Leaflet map on landing page |
 | **NTEE categorization** | ✅ Done | 47 NTEE codes with human-readable meanings on org cards |
 | **Focus area tagging** | ✅ Done | 27 focus areas with dropdown filter on Organizations page |
@@ -85,10 +97,10 @@ org-profiles/
 - `focus` (array of 27 possible areas)
 - `website`, `mission_statement_text`
 
-### Financials Table (1197 records)
+### Financials Table (1,197 records)
 - `id`, `organization_id` (foreign key)
 - `year` (fiscal year), `revenue`, `expenses`, `assets`
-- 286 organizations have financial data
+- 243 organizations have financial data (~40% of the 607-org table)
 
 ### Outlets Table
 - `id`, `name`, `url`, `outlet_type`, `region`
