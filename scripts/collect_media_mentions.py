@@ -243,7 +243,7 @@ Do not include articles from other websites."""
         for attempt in range(max_retries):
             try:
                 response = self.client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-sonnet-4-5-20250929",
                     max_tokens=4000,
                     tools=[{"type": "web_search_20250305", "name": "web_search"}],
                     messages=[{
